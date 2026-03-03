@@ -1,0 +1,18 @@
+# Credentials and secrets
+.env
+*.env.*
+secrets/
+cookies.json
+
+# n8n instance-specific
+staticData.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.cursor/
+.vscode/
+*.swp
+*.swo

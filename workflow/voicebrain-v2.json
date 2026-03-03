@@ -1,0 +1,821 @@
+{
+  "name": "voicebrain-v2",
+  "nodes": [
+    {
+      "id": "telegram-trigger",
+      "name": "Message Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        200,
+        100
+      ],
+      "typeVersion": 1.2,
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "id": "route-input",
+      "name": "Route Chat Input",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        420,
+        100
+      ],
+      "typeVersion": 3.2,
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cmd",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    },
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "voice",
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.message.voice }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "voice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "photo",
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.message.photo }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "photo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "callback",
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.callback_query }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "callback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "get-audio",
+      "name": "Get audio file",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        640,
+        0
+      ],
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "fileId": "={{ $json.message.voice.file_id }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "id": "transcribe",
+      "name": "Transcribe audio",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "position": [
+        860,
+        0
+      ],
+      "typeVersion": 2.1,
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "id": "photo-text",
+      "name": "Photo to Text",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        860,
+        200
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const msg=$('Message Trigger').first().json.message;\nreturn [{json:{text:msg.caption||'[photo without caption]'}}];"
+      }
+    },
+    {
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1080,
+        100
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const msg = $('Message Trigger').first().json.message;\nconst chatId = msg.chat.id;\nconst messageId = msg.message_id;\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.processedIds) staticData.processedIds = [];\nconst dedupKey = msg.voice?.file_unique_id || msg.audio?.file_unique_id || msg.photo?.[0]?.file_unique_id || String(messageId);\nif (staticData.processedIds.includes(dedupKey)) { return []; }\nstaticData.processedIds.push(dedupKey);\nif (staticData.processedIds.length > 100) staticData.processedIds = staticData.processedIds.slice(-100);\n\nlet text = '';\nlet messageType = 'text';\nlet replyRef = null;\nlet replyContext = null;\n\nconst transcription = $input.first().json.text;\nif (transcription && msg.voice) {\n  text = transcription;\n  messageType = 'voice';\n} else if (msg.text) {\n  text = msg.text;\n  messageType = 'text';\n} else if (msg.caption) {\n  text = msg.caption;\n  messageType = 'photo';\n}\n\nif (msg.reply_to_message) {\n  const replyMsg = msg.reply_to_message;\n  const replyText = replyMsg.text || replyMsg.caption || '';\n  const replyMessageId = replyMsg.message_id;\n  const ghMatch = replyText.match(/GitHub #(\\d+) \\(([\\w-]+\\/[\\w-]+)\\)/);\n  if (ghMatch) replyRef = 'github:' + ghMatch[2] + '#' + ghMatch[1];\n  if (!replyRef) {\n    const memoMatch = replyText.match(/memos\\/([\\w-]+)/);\n    if (memoMatch) replyRef = 'memo:' + memoMatch[1];\n  }\n  const projectMatch = replyText.match(/\\u{1F4C1} ([\\w-]+)/u);\n  replyContext = {\n    ref: replyRef,\n    project: projectMatch ? projectMatch[1] : null,\n    replyText: replyText.substring(0, 500),\n    replyMessageId: replyMessageId,\n    isFromBot: replyMsg.from?.is_bot === true,\n  };\n}\n\n// Store in chat history\nif (!staticData.chatHistory) staticData.chatHistory = [];\nstaticData.chatHistory.push({ role: 'user', text: text.substring(0, 300), ts: Date.now() });\nif (staticData.chatHistory.length > 40) staticData.chatHistory = staticData.chatHistory.slice(-40);\n\nconst history = staticData.chatHistory.slice(-20).map(h => `[${h.role === 'user' ? 'You' : 'VoiceBrain'}] ${h.text}`).join('\\n');\n\nreturn [{\n  json: {\n    chatId, messageId, text, messageType, replyRef, replyContext,\n    username: msg.from?.username || msg.from?.first_name || 'unknown',\n    chatHistory: history,\n  }\n}];"
+      }
+    },
+    {
+      "id": "parse-callback",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        640,
+        400
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const trigger = $('Message Trigger').first().json;\nconst cb = trigger.callback_query;\nconst data = cb.data.replace('vb:', '');\nconst chatId = cb.message.chat.id;\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.chatHistory) staticData.chatHistory = [];\nstaticData.chatHistory.push({ role: 'user', text: `[Selected: ${data}]`, ts: Date.now() });\nif (staticData.chatHistory.length > 40) staticData.chatHistory = staticData.chatHistory.slice(-40);\nconst history = staticData.chatHistory.slice(-20).map(h => `[${h.role === 'user' ? 'You' : 'VoiceBrain'}] ${h.text}`).join('\\n');\n\nreturn [{\n  json: {\n    chatId,\n    text: `User selected: ${data}`,\n    messageType: 'callback',\n    chatHistory: history,\n    replyContext: null,\n    callbackQueryId: cb.id,\n  }\n}];"
+      }
+    },
+    {
+      "id": "answer-callback",
+      "name": "Answer Callback",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        860,
+        400
+      ],
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $json.callbackQueryId }}",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "id": "cmd-handler",
+      "name": "Command Handler",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        640,
+        -200
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const msg=$('Message Trigger').first().json.message;\nconst chatId=msg.chat.id,txt=(msg.text||'').trim(),cmd=txt.split(' ')[0].toLowerCase(),args=txt.substring(cmd.length).trim();\nconst staticData=$getWorkflowStaticData('global');\nlet reply='';\nif(cmd==='/start'){\n  staticData.chatHistory=[];\n  reply='\\u{1F9E0} <b>VoiceBrain v2</b>\\n\\nI\\'m your personal AI assistant. Send me voice notes, text, or photos and I\\'ll handle them intelligently.\\n\\nCommands:\\n/help - What I can do\\n/tasks - Open tasks\\n/search &lt;term&gt; - Search notes';\n} else if(cmd==='/help'){\n  reply='\\u{1F4AC} <b>What I can do:</b>\\n\\n\\u{1F4DD} Save notes, ideas, tasks\\n\\u{1F6D2} Add to shopping list\\n\\u{1F41D} Create GitHub issues\\n\\u{1F50D} Search your notes\\n\\u{1F310} Search the web\\n\\u270D\\uFE0F Write emails in your style\\n\\u{1F504} Edit existing notes\\n\\n<i>Just talk to me naturally!</i>';\n} else if(cmd==='/tasks'){\n  reply='Fetching tasks... (use natural language instead, e.g. \"show my open tasks\")';\n} else if(cmd==='/search'){\n  if(!args) reply='Usage: /search &lt;term&gt;';\n  else reply=`Searching... (use natural language instead, e.g. \"search notes about ${args}\")`;\n} else {\n  reply='Unknown command. Try /help';\n}\nreturn [{json:{chatId,text:reply}}];"
+      }
+    },
+    {
+      "id": "vb-agent",
+      "name": "VoiceBrain Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1500,
+        100
+      ],
+      "typeVersion": 3,
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "=You are VoiceBrain, a personal AI assistant that communicates via Telegram.\nCurrent date/time: {{ $now.format('yyyy-MM-dd HH:mm') }}\n\nPERSONALITY:\n- Helpful, concise, natural conversational tone\n- Respond in the same language the user uses (Spanish, English, German)\n- Use emojis sparingly and naturally\n- Keep replies short — this is Telegram, not email\n\nFORMATTING (CRITICAL — Telegram does NOT support markdown):\n- NEVER use [text](url) links. This syntax does NOT work in Telegram.\n- ALWAYS paste URLs directly as plain text: https://example.com\n- NEVER wrap URLs in parentheses or brackets\n- Use <b>bold</b> and <i>italic</i> HTML tags if needed (Telegram HTML mode)\n- Keep responses under 500 characters when possible\n\nCAPABILITIES (use your tools):\n- Save notes, ideas, tasks → create_memo\n- Shopping lists → add_to_bring\n- Project tasks/bugs/features → create_github_issue (repos: madrid-alive, madrid-rollers/rollersite, abonoteatro, deckforge, familias-enlazadas)\n- Search saved notes → search_memos\n- Search the web → web_search\n- Edit existing notes → update_memo\n- List pending tasks → get_open_tasks\n- Write emails/text in user's style → use Pinecone tool to retrieve style samples, then write\n- Ask for clarification → send_buttons (sends inline keyboard buttons)\n\nRULES:\n1. When intent is clear, act immediately — don't ask for confirmation on non-destructive actions\n2. When ambiguous (e.g., no project specified for an issue), use send_buttons with options\n3. For shopping: extract individual items. \"compra leche, pan y huevos\" = 3 separate items\n4. For project tasks: fuzzy-match names (rollersite → madrid-rollers, etc.)\n5. For writing tasks (emails, summaries): ALWAYS use Pinecone to match user's style first\n6. For reminders: use the current date/time to calculate correct dates\n7. Multiple topics in one message? Handle them all — call multiple tools\n8. When replying to a previous message, use the reply context below\n9. NEVER return raw JSON to the user. Always respond naturally.\n10. After using tools, confirm what you did concisely. Include the plain URL on its own line.\n\nCONVERSATION HISTORY:\n{{ $json.chatHistory || 'No previous messages.' }}\n\nREPLY CONTEXT:\n{{ $json.replyContext ? JSON.stringify($json.replyContext) : 'Not a reply.' }}",
+          "maxIterations": 15
+        }
+      }
+    },
+    {
+      "id": "chat-model",
+      "name": "Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1300,
+        300
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "id": "tool-create-memo",
+      "name": "Tool: Create Memo",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1300,
+        500
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Create a new memo/note. Pass a JSON string with title, body, and optional tags array.",
+        "specifyInputSchema": true,
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\"title\": \"Meeting notes\", \"body\": \"Discussed project timeline\", \"tags\": [\"work\", \"meeting\"]}",
+        "jsCode": "try {\nconst args = typeof query === 'string' ? JSON.parse(query) : query;\nif (!args.title) {\n  const rawText = typeof query === 'string' ? query : JSON.stringify(query);\n  args.title = rawText.substring(0, 80);\n  args.body = rawText;\n  args.tags = [];\n}\nconst url = $env.MEMOS_URL || 'http://memos:5230';\nconst token = $env.MEMOS_TOKEN;\nconst tags = (args.tags || []).map(t => '#' + t.replace(/^#/, '')).join(' ');\nconst content = `${args.title}\\n\\n${args.body}\\n\\n${tags}`.trim();\nconst memo = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `${url}/api/v1/memos`,\n  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },\n  body: JSON.stringify({ content, visibility: 'PRIVATE' }),\n  json: true,\n});\nconst uid = memo.name?.replace('memos/', '') || 'unknown';\nreturn `Memo created: https://voicebrain.madridrollers.es/memos/${uid}`;\n} catch(e) { return `Error creating memo: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-bring",
+      "name": "Tool: Add to Bring",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1500,
+        500
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Add items to the Bring! shopping list. Pass a JSON string with items array.",
+        "specifyInputSchema": true,
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\"items\": [{\"item\": \"milk\", \"spec\": \"2 liters\"}, {\"item\": \"bread\", \"spec\": \"\"}]}",
+        "jsCode": "try {\nlet args = typeof query === 'string' ? JSON.parse(query) : query;\nif (!args || !args.items) {\n  const rawText = typeof query === 'string' ? query : JSON.stringify(query);\n  const itemNames = rawText.split(/[,;y&]|\\band\\b/i).map(s => s.trim()).filter(s => s.length > 0);\n  args = { items: itemNames.map(name => ({ item: name, spec: '' })) };\n}\nconst items = args.items;\nif (!items || !Array.isArray(items) || items.length === 0) {\n  return 'No items specified.';\n}\nconst email = $env.BRING_EMAIL;\nconst password = $env.BRING_PASSWORD;\nif (!email || !password) return 'Bring! not configured.';\nconst BRING_API_KEY = '***REDACTED_BRING_CLIENT_KEY***';\nconst bringHeaders = { 'X-BRING-API-KEY': BRING_API_KEY, 'X-BRING-CLIENT': 'android', 'X-BRING-APPLICATION': 'bring' };\nconst loginResp = await this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.getbring.com/rest/v2/bringauth',\n  headers: { ...bringHeaders, 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,\n  json: true,\n});\nconst token = loginResp.access_token;\nconst uuid = loginResp.uuid;\nif (!token || !uuid) return 'Bring! login failed.';\nconst authHeaders = { 'Authorization': `Bearer ${token}`, ...bringHeaders };\nconst listsResp = await this.helpers.httpRequest({\n  method: 'GET', url: `https://api.getbring.com/rest/v2/bringusers/${uuid}/lists`,\n  headers: authHeaders, json: true,\n});\nconst listId = listsResp.lists?.[0]?.listUuid;\nif (!listId) return 'No shopping list found in Bring!';\nconst added = [];\nfor (const it of items) {\n  const name = (it.item || it.name || it).toString().trim();\n  if (!name) continue;\n  const spec = (it.spec || it.detail || '').toString().trim();\n  await this.helpers.httpRequest({\n    method: 'PUT',\n    url: `https://api.getbring.com/rest/v2/bringlists/${listId}`,\n    headers: { ...authHeaders, 'Content-Type': 'application/x-www-form-urlencoded' },\n    body: `purchase=${encodeURIComponent(name)}&specification=${encodeURIComponent(spec)}`,\n  });\n  added.push(spec ? `${name} (${spec})` : name);\n}\nreturn `Added to shopping list: ${added.join(', ')}`;\n} catch(e) { return `Bring! error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-github",
+      "name": "Tool: GitHub Issue",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1700,
+        500
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Create a GitHub issue in a repository. Pass JSON with project name, title, and optional body.",
+        "specifyInputSchema": true,
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\"project\": \"madrid-alive\", \"title\": \"Fix login bug\", \"body\": \"Users cannot log in on mobile\"}",
+        "jsCode": "try {\nconst args = typeof query === 'string' ? JSON.parse(query) : query;\nif (!args || !args.project) {\n  return 'Please provide project and title as JSON.';\n}\nconst pat = $env.GITHUB_PAT;\nif (!pat) return 'GitHub not configured.';\nconst headers = { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };\nconst repos = await this.helpers.httpRequest({\n  method: 'GET', url: 'https://api.github.com/user/repos?per_page=100&sort=updated&type=all',\n  headers, json: true,\n});\nconst repoList = repos.map(r => ({ name: r.name, full: r.full_name }));\nconst p = (args.project || '').toLowerCase();\nlet repo = repoList.find(r => r.name.toLowerCase() === p)?.full;\nif (!repo) repo = repoList.find(r => r.name.toLowerCase().includes(p) || p.includes(r.name.toLowerCase()))?.full;\nif (!repo) {\n  const parts = p.split('-');\n  repo = repoList.find(r => parts.some(pt => pt.length > 2 && r.name.toLowerCase().includes(pt)))?.full;\n}\nif (!repo) return `No matching repo for \"${args.project}\". Available: ${repoList.map(r => r.name).join(', ')}`;\nconst issue = await this.helpers.httpRequest({\n  method: 'POST', url: `https://api.github.com/repos/${repo}/issues`,\n  headers: { ...headers, 'Content-Type': 'application/json' },\n  body: JSON.stringify({ title: args.title, body: `${args.body || ''}\\n\\n---\\n_Created via VoiceBrain_` }),\n  json: true,\n});\nreturn `GitHub Issue #${issue.number} created in ${repo}: ${issue.html_url}`;\n} catch(e) { return `GitHub error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-search-memos",
+      "name": "Tool: Search Memos",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1300,
+        700
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Search saved memos/notes by content. Pass the search term as a plain string. Returns matching memos with links.",
+        "specifyInputSchema": false,
+        "jsCode": "try {\nconst searchTerm = typeof query === 'string' ? query : (query?.query || '');\nif (!searchTerm) return 'Please specify a search term.';\nconst url = $env.MEMOS_URL || 'http://memos:5230';\nconst token = $env.MEMOS_TOKEN;\nconst response = await this.helpers.httpRequest({\n  method: 'GET', url: `${url}/api/v1/memos`,\n  qs: { pageSize: 50 },\n  headers: { 'Authorization': `Bearer ${token}` }, json: true,\n});\nconst memos = (response.memos || []).filter(m => \n  (m.content || '').toLowerCase().includes(searchTerm.toLowerCase())\n);\nif (memos.length === 0) return `No memos found containing \"${searchTerm}\".`;\nconst results = memos.slice(0, 5).map(m => {\n  const uid = m.name?.replace('memos/', '') || '?';\n  const preview = (m.content || '').substring(0, 150).replace(/\\n/g, ' ');\n  return `- ${preview}... (https://voicebrain.madridrollers.es/memos/${uid})`;\n});\nreturn `Found ${memos.length} memo(s):\\n${results.join('\\n')}`;\n} catch(e) { return `Search error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-web-search",
+      "name": "Tool: Web Search",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1500,
+        700
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Search the web using Brave Search. Pass the search query as a plain string. Returns top web results.",
+        "specifyInputSchema": false,
+        "jsCode": "try {\nconst searchTerm = typeof query === 'string' ? query : (query?.query || '');\nif (!searchTerm) return 'Please specify a search term.';\nconst apiKey = $env.BRAVE_SEARCH_KEY;\nif (!apiKey) return 'Web search not configured (missing BRAVE_SEARCH_KEY).';\nconst response = await this.helpers.httpRequest({\n  method: 'GET', url: 'https://api.search.brave.com/res/v1/web/search',\n  qs: { q: searchTerm, count: 5 },\n  headers: { 'Accept': 'application/json', 'Accept-Encoding': 'gzip', 'X-Subscription-Token': apiKey },\n  json: true,\n});\nconst results = (response.web?.results || []).slice(0, 5).map(r => \n  `- ${r.title}: ${r.description || ''} (${r.url})`\n);\nreturn results.length ? `Web results for \"${searchTerm}\":\\n${results.join('\\n')}` : `No web results for \"${searchTerm}\".`;\n} catch(e) { return `Web search error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-update-memo",
+      "name": "Tool: Update Memo",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1700,
+        700
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Update an existing memo by appending or replacing content. Pass JSON with memo_id, new_content, and optional mode (append/replace).",
+        "specifyInputSchema": true,
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\"memo_id\": \"abc123\", \"new_content\": \"Additional text\", \"mode\": \"append\"}",
+        "jsCode": "try {\nconst args = typeof query === 'string' ? JSON.parse(query) : query;\nif (!args || !args.memo_id) {\n  return 'Please specify a memo_id and new_content to update.';\n}\nconst url = $env.MEMOS_URL || 'http://memos:5230';\nconst token = $env.MEMOS_TOKEN;\nif (args.mode === 'replace') {\n  await this.helpers.httpRequest({\n    method: 'PATCH', url: `${url}/api/v1/memos/${args.memo_id}`,\n    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },\n    body: JSON.stringify({ content: args.new_content }), json: true,\n  });\n  return `Memo replaced. View: https://voicebrain.madridrollers.es/memos/${args.memo_id}`;\n} else {\n  const current = await this.helpers.httpRequest({\n    method: 'GET', url: `${url}/api/v1/memos/${args.memo_id}`,\n    headers: { 'Authorization': `Bearer ${token}` }, json: true,\n  });\n  const updated = (current.content || '') + '\\n\\n---\\n' + args.new_content;\n  await this.helpers.httpRequest({\n    method: 'PATCH', url: `${url}/api/v1/memos/${args.memo_id}`,\n    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },\n    body: JSON.stringify({ content: updated }), json: true,\n  });\n  return `Appended to memo. View: https://voicebrain.madridrollers.es/memos/${args.memo_id}`;\n}\n} catch(e) { return `Update error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-tasks",
+      "name": "Tool: Get Tasks",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1900,
+        500
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "List open tasks from memos tagged with #task and #open. Pass a project name string to filter, or empty string for all tasks.",
+        "specifyInputSchema": false,
+        "jsCode": "try {\nconst project = typeof query === 'string' && query.trim() ? query.trim() : null;\nconst url = $env.MEMOS_URL || 'http://memos:5230';\nconst token = $env.MEMOS_TOKEN;\nconst response = await this.helpers.httpRequest({\n  method: 'GET', url: `${url}/api/v1/memos`,\n  qs: { pageSize: 50, filter: 'content.contains(\"#task\") && content.contains(\"#open\")' },\n  headers: { 'Authorization': `Bearer ${token}` }, json: true,\n});\nlet memos = response.memos || [];\nif (project) {\n  const p = project.toLowerCase();\n  memos = memos.filter(m => (m.content || '').toLowerCase().includes(p));\n}\nconst tasks = memos.map(m => {\n  const title = (m.content || '').split('\\n')[0].substring(0, 80);\n  return `\\u2022 ${title}`;\n});\nreturn tasks.length ? `${tasks.length} open tasks:\\n${tasks.join('\\n')}` : 'No open tasks found.';\n} catch(e) { return `Tasks error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "tool-buttons",
+      "name": "Tool: Send Buttons",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1900,
+        700
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "description": "Send inline keyboard buttons to user via Telegram for disambiguation. Pass JSON with question and options array.",
+        "specifyInputSchema": true,
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\"question\": \"Which project?\", \"options\": [{\"id\": \"madrid\", \"label\": \"Madrid Alive\"}, {\"id\": \"deck\", \"label\": \"DeckForge\"}]}",
+        "jsCode": "try {\nconst args = typeof query === 'string' ? JSON.parse(query) : query;\nif (!args || !args.question || !args.options) {\n  return 'Please provide a question and options for the buttons.';\n}\nconst chatId = $('Parse Input').first()?.json?.chatId || $getWorkflowStaticData('global').lastChatId;\nconst staticData = $getWorkflowStaticData('global');\nconst botToken = staticData._botToken;\nif (!botToken) return 'Bot token not available for sending buttons.';\nconst keyboard = {\n  inline_keyboard: args.options.map(o => [{ text: o.label, callback_data: `vb:${o.id}` }]),\n};\nawait this.helpers.httpRequest({\n  method: 'POST', url: `https://api.telegram.org/bot${botToken}/sendMessage`,\n  body: JSON.stringify({ chat_id: chatId, text: args.question, reply_markup: keyboard, parse_mode: 'HTML' }),\n  headers: { 'Content-Type': 'application/json' }, json: true,\n});\nreturn `Question sent: \"${args.question}\" with ${args.options.length} options. Wait for reply.`;\n} catch(e) { return `Button error: ${e.message}`; }"
+      }
+    },
+    {
+      "id": "format-reply",
+      "name": "Format Reply",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1800,
+        100
+      ],
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const agentOutput = $json.output || $json.text || '';\nconst parseInput = $('Parse Input');\nlet chatId;\ntry { chatId = parseInput.first()?.json?.chatId; } catch(e) {}\nif (!chatId) {\n  try { chatId = $('Parse Callback').first()?.json?.chatId; } catch(e) {}\n}\nif (!chatId) {\n  try { chatId = $('Answer Callback').first()?.json?.chatId; } catch(e) {}\n}\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.chatHistory) staticData.chatHistory = [];\nstaticData.chatHistory.push({ role: 'assistant', text: agentOutput.substring(0, 300), ts: Date.now() });\nif (staticData.chatHistory.length > 40) staticData.chatHistory = staticData.chatHistory.slice(-40);\nif (chatId) staticData.lastChatId = chatId;\n\nreturn [{ json: { chatId, text: agentOutput } }];"
+      }
+    },
+    {
+      "id": "send-reply",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        2050,
+        100
+      ],
+      "typeVersion": 1.2,
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "id": "pinecone-vs",
+      "name": "Pinecone Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "position": [
+        1500,
+        900
+      ],
+      "typeVersion": 1.3,
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search the user's writing style samples. Use this tool when you need to write text that matches the user's personal tone, vocabulary, and writing patterns. Returns examples of how the user writes emails, messages, and notes.",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "voicebraincommand",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "YOUR_PINECONE_CREDENTIAL_ID",
+          "name": "Pinecone API"
+        }
+      }
+    },
+    {
+      "id": "embeddings",
+      "name": "Embeddings OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "position": [
+        1500,
+        1100
+      ],
+      "typeVersion": 1.2,
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {
+          "dimensions": 1024
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Message Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Chat Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Chat Input": {
+      "main": [
+        [
+          {
+            "node": "Command Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get audio file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Photo to Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get audio file": {
+      "main": [
+        [
+          {
+            "node": "Transcribe audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe audio": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photo to Text": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Command Handler": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Callback": {
+      "main": [
+        [
+          {
+            "node": "Answer Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Callback": {
+      "main": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VoiceBrain Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Create Memo": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Add to Bring": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: GitHub Issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Search Memos": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Web Search": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Update Memo": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Get Tasks": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Send Buttons": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "ai_tool": [
+        [
+          {
+            "node": "VoiceBrain Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
