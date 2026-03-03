@@ -3,6 +3,18 @@
 All notable changes to VoiceBrain are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0] - 2026-03-03
+
+### Added
+- **mark_done mode** for update_memo — replaces `#open` with `#done` in memo content
+- **replace_tag mode** for update_memo — replace any tag with another (`old_tag` → `new_tag`)
+- **voicebrain GitHub repo** — public repo with sanitized workflow, README, CHANGELOG, AGENTS.md
+
+### Fixed
+- **update_memo always reads memo first** — all modes now GET current content before PATCHing
+- **GitHub tool filters archived repos** — no more permission errors on familias-enlazadas, madrid-alive, etc.
+- **System prompt repo list** — updated to non-archived repos: voicebrain, madrid-alive-vercel, rollersite-vercel, abonoteatro, madrid-rollers, community-orchestrator, Review-Gate
+
 ## [2.0.0] - 2026-03-03
 
 ### Added
