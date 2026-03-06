@@ -3,6 +3,32 @@
 All notable changes to VoiceBrain are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.2] - 2026-03-06
+
+### Added
+- **Style memory data loaded** — loaded 2 writing style samples (182 chunks total) into Pinecone vector store via existing `pinecone-data-loader` workflow
+
+### Changed
+- **Strengthened style memory instructions** — added mandatory `STYLE MEMORY` section to system prompt forcing the AI to call Pinecone FIRST before writing any email/letter/formal text. Includes explicit step-by-step instructions and non-negotiable language
+
+### Removed
+- **Stale test workflow** — deleted `test-memos-api-debug` workflow from n8n
+
+## [2.1.1] - 2026-03-06
+
+### Fixed
+- **Shopping items misrouted to memo** (#3, #5, #7) — enhanced tool descriptions so the AI agent defaults to `add_to_bring` for shopping requests, but respects explicit user intent (e.g., "save a note to buy a hair dryer" → `create_memo`)
+- **Editing notes silently failing** (#4, #6, #8) — root cause: n8n toolCode nodes have a known bug where `this.helpers.httpRequest` with `await` silently fails (returns empty). Same code works in regular Code nodes. Fixed by delegating to a sub-workflow (`voicebrain-update-memo`) that performs the Memos API GET+PATCH in a regular Code node
+- **Memos API PATCH missing updateMask** — added required `?updateMask=content` query parameter; Memos API v1 silently ignores PATCH without it
+- **Tool schema incomplete** — expanded `jsonSchemaExample` for update_memo to include `new_content` field so the AI knows to provide content for replace/append modes
+
+### Added
+- **Sub-workflow: voicebrain-update-memo** (`1YZbnbn8WRxIv8MY`) — dedicated webhook workflow for memo updates, called internally from the toolCode via `POST http://localhost:5678/webhook/vb-update-memo`
+- **Project-level MCP config** — `.cursor/mcp.json` with n8n-mcp and review-gate-v2 for direct access from the voicebrain workspace
+
+### Changed
+- **Git workflow file synced** — exported live workflow (24 nodes incl. `tool-transcription`) to `voicebrain-v2.json`, sanitized credentials
+
 ## [2.1.0] - 2026-03-03
 
 ### Added
